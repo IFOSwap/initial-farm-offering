@@ -13,6 +13,16 @@ interface IMasterChef {
     function userInfo(uint256 _pid, address _address)
         external
         returns (uint256, uint256);
+
+    function poolInfo(uint256 _pid)
+        external
+        returns (
+            IBEP20,
+            uint256,
+            uint256,
+            uint256,
+            uint16
+        );
 }
 
 contract IFO is ReentrancyGuard {
@@ -81,6 +91,36 @@ contract IFO is ReentrancyGuard {
         uint256 _pid,
         IBEP20 _farmRewardToken
     ) public {
+        require(
+            address(_lpToken) != address(_offeringToken),
+            "lpToken and offeringToken cannot be the same address"
+        );
+        require(
+            address(_lpToken) != address(_farmRewardToken),
+            "lpToken and farmRewardToken cannot be the same address"
+        );
+        require(
+            address(_offeringToken) != address(_farmRewardToken),
+            "offeringToken and farmRewardToken cannot be the same address"
+        );
+        require(
+            _startBlock < _endBlock,
+            "startBlock must be lower than endBlock"
+        );
+        require(
+            block.number < _startBlock,
+            "startBlock must be higher than current block"
+        );
+        require(_offeringAmount > 0, "invalid offeringAmount");
+        require(_raisingAmount > 0, "invalid raisingAmount");
+        require(
+            _adminAddress != address(0),
+            "adminAddress cannot be the zero address"
+        );
+
+        // test if masterChef address and pid is the correct value
+        _masterChef.poolInfo(_pid);
+
         lpToken = _lpToken;
         offeringToken = _offeringToken;
         startBlock = _startBlock;
@@ -139,7 +179,9 @@ contract IFO is ReentrancyGuard {
             "not ifo time"
         );
         require(_amount > 0, "need _amount > 0");
+        uint256 balanceBefore = lpToken.balanceOf(address(this));
         lpToken.safeTransferFrom(address(msg.sender), address(this), _amount);
+        _amount = lpToken.balanceOf(address(this)).sub(balanceBefore);
         if (approved) {
             masterChef.deposit(pid, _amount);
         }
@@ -235,7 +277,10 @@ contract IFO is ReentrancyGuard {
     }
 
     function finalWithdrawLPToken(uint256 _lpAmount) public onlyAdmin {
-        require(block.number > endBlock, "IFO not end");
+        require(
+            block.number > endBlock + 201600,
+            "not after 7 days of IFO ended"
+        );
         require(
             _lpAmount <= lpToken.balanceOf(address(this)),
             "not enough LP Token"
@@ -245,8 +290,8 @@ contract IFO is ReentrancyGuard {
 
     function finalWithdrawOfferingToken(uint256 _offerAmount) public onlyAdmin {
         require(
-            block.number > endBlock + 57600,
-            "not after 2 days of IFO ended"
+            block.number > endBlock + 201600,
+            "not after 7 days of IFO ended"
         );
         require(
             _offerAmount <= offeringToken.balanceOf(address(this)),
